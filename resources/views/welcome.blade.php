@@ -49,6 +49,9 @@
                             <!-- User data will be inserted here -->
                         </tbody>
                     </table>
+                    <div id="pagination" class="d-flex justify-content-center mt-3">
+                        <!-- Pagination controls will be inserted here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -99,6 +102,11 @@
             const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
             let currentDeleteId = null;
             let editMode = false;
+
+            // Pagination variables
+            let currentPage = 1;
+            let itemsPerPage = 5;
+            let allUsers = [];
 
             // Initial load of users
             fetchUsers();
@@ -155,6 +163,16 @@
                 }
             });
 
+            // Pagination click handler
+            $(document).on('click', '.page-link', function(e) {
+                e.preventDefault();
+                const targetPage = $(this).data('page');
+                if (targetPage !== currentPage) {
+                    currentPage = targetPage;
+                    renderUserTable();
+                }
+            });
+
             // Clear validation errors
             function clearErrors() {
                 $('.is-invalid').removeClass('is-invalid');
@@ -174,15 +192,17 @@
             // Show error in form fields
             function showValidationErrors(errors) {
                 if (typeof errors === 'object') {
-                    Object.keys(errors).forEach(function(field) {
-                        const errorMessage = errors[field][0];
-                        const inputField = $('#' + field);
+                    for (let field in errors) {
+                        if (errors.hasOwnProperty(field)) {
+                            const errorMessage = errors[field][0];
+                            const inputField = $('#' + field);
 
-                        inputField.addClass('is-invalid');
-                        inputField.after(
-                            `<div class="invalid-feedback">${errorMessage}</div>`
-                        );
-                    });
+                            inputField.addClass('is-invalid');
+                            inputField.after(
+                                `<div class="invalid-feedback">${errorMessage}</div>`
+                            );
+                        }
+                    }
                 }
             }
 
@@ -205,7 +225,14 @@
                     type: "GET",
                     success: function(response) {
                         if (response.status) {
-                            renderUserTable(response.data.data);
+                            // Store all users for pagination
+                            if (response.data && response.data.data) {
+                                allUsers = response.data.data;
+                                currentPage = 1;
+                                renderUserTable();
+                            } else {
+                                showAlert('Error', 'Invalid response format');
+                            }
                         } else {
                             showAlert('Error', 'Failed to fetch users');
                         }
@@ -216,35 +243,99 @@
                 });
             }
 
-            // Render user table
-            function renderUserTable(users) {
+            // Generate pagination controls
+            function generatePagination() {
+                const totalPages = Math.ceil(allUsers.length / itemsPerPage);
+                let paginationHTML = '<nav aria-label="Page navigation"><ul class="pagination">';
+
+                // Previous button
+                paginationHTML += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                                    <a class="page-link" href="#" data-page="${currentPage - 1}" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                   </li>`;
+
+                // Page numbers
+                for (let i = 1; i <= totalPages; i++) {
+                    paginationHTML += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+                                        <a class="page-link" href="#" data-page="${i}">${i}</a>
+                                       </li>`;
+                }
+
+                // Next button
+                paginationHTML += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                                    <a class="page-link" href="#" data-page="${currentPage + 1}" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                   </li>`;
+
+                paginationHTML += '</ul></nav>';
+
+                $('#pagination').html(paginationHTML);
+            }
+
+            // Render user table with pagination
+            function renderUserTable() {
                 $('#userTableBody').empty();
 
-                if (users && users.length > 0) {
-                    users.forEach(function(user) {
-                        $('#userTableBody').append(`
-                            <tr>
-                                <td>${user.ID || 'N/A'}</td>
-                                <td>${user.Name}</td>
-                                <td>${user.Email}</td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-primary edit-btn" 
-                                        data-id="${user.ID}" 
-                                        data-name="${user.Name}" 
-                                        data-email="${user.Email}">
-                                        Edit
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-danger delete-btn" 
-                                        data-id="${user.ID}">
-                                        Delete
-                                    </button>
-                                </td>
-                            </tr>
-                        `);
-                    });
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = Math.min(startIndex + itemsPerPage, allUsers.length);
+
+                if (allUsers.length > 0) {
+                    // Using traditional for loop instead of forEach
+                    for (let i = startIndex; i < endIndex; i++) {
+                        const user = allUsers[i];
+                        if (user && user.ID && user.Name && user.Email) {
+                            let tr = document.createElement('tr');
+
+                            let tdId = document.createElement('td');
+                            tdId.textContent = user.ID || 'N/A';
+
+                            let tdName = document.createElement('td');
+                            tdName.textContent = user.Name;
+
+                            let tdEmail = document.createElement('td');
+                            tdEmail.textContent = user.Email;
+
+                            let tdActions = document.createElement('td');
+
+                            let editBtn = document.createElement('button');
+                            editBtn.setAttribute('type', 'button');
+                            editBtn.setAttribute('class', 'btn btn-sm btn-primary edit-btn me-2');
+                            editBtn.setAttribute('data-id', user.ID);
+                            editBtn.setAttribute('data-name', user.Name);
+                            editBtn.setAttribute('data-email', user.Email);
+                            editBtn.textContent = 'Edit';
+
+                            let deleteBtn = document.createElement('button');
+                            deleteBtn.setAttribute('type', 'button');
+                            deleteBtn.setAttribute('class', 'btn btn-sm btn-danger delete-btn');
+                            deleteBtn.setAttribute('data-id', user.ID);
+                            deleteBtn.textContent = 'Delete';
+
+                            tdActions.appendChild(editBtn);
+                            tdActions.appendChild(deleteBtn);
+
+                            tr.appendChild(tdId);
+                            tr.appendChild(tdName);
+                            tr.appendChild(tdEmail);
+                            tr.appendChild(tdActions);
+
+                            document.getElementById('userTableBody').appendChild(tr);
+                        }
+                    }
                 } else {
-                    $('#userTableBody').append('<tr><td colspan="4" class="text-center">No users found</td></tr>');
+                    let tr = document.createElement('tr');
+                    let td = document.createElement('td');
+                    td.setAttribute('colspan', '4');
+                    td.setAttribute('class', 'text-center');
+                    td.textContent = 'No users found';
+                    tr.appendChild(td);
+                    document.getElementById('userTableBody').appendChild(tr);
                 }
+
+                // Generate pagination
+                generatePagination();
             }
 
             // Create new user
